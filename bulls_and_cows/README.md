@@ -1,4 +1,4 @@
-# Bulls and Cows
+# Bulls:ox: & :cow2:Cows
 
 就是那个每个有机器人的QQ群都会有的猜数小游戏
 
