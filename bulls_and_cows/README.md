@@ -1,6 +1,6 @@
 # Bulls:ox: & :cow2:Cows
 
-<script id="asciicast-Lu9LzD24OgehKPwNXrQKxYw8S" src="https://asciinema.org/a/Lu9LzD24OgehKPwNXrQKxYw8S.js" async></script>
+[![asciicast](https://asciinema.org/a/Lu9LzD24OgehKPwNXrQKxYw8S.svg)](https://asciinema.org/a/Lu9LzD24OgehKPwNXrQKxYw8S)
 
 _上述的文本提示为了兼容asciinema由轻微改动_
 
