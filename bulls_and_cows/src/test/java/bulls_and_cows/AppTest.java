@@ -28,8 +28,17 @@ public class AppTest {
             for (int i = 0; i < actuals.length; i++)
                 actuals[i] = getHint.invoke(null, "1234", actualsArguments[i]).toString();
             assertArrayEquals(
-                "Private method \"getHint\" should work",
+                "Private method \"getHint\" should work in mode DISTINCT",
                 expecteds, actuals
+            );
+            final String[] indistinctExpecteds = new String[] { "3A0B", "2A1B", "1A1B", "0A3B" };
+            final String[] indistinctActualsArguments = new String[] { "1234", "1334", "3334", "3324" };
+            String[] indistinctActuals = new String[indistinctActualsArguments.length];
+            for (int i = 0; i < indistinctActuals.length; i++)
+            indistinctActuals[i] = getHint.invoke(null, "1233", indistinctActualsArguments[i]).toString();
+            assertArrayEquals(
+                "Private method \"getHint\" should work in mode INDISTINCT",
+                indistinctExpecteds, indistinctActuals
             );
         } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
             e.printStackTrace();
@@ -51,17 +60,17 @@ public class AppTest {
                     secret = getSecret.invoke(null, 4, mode).toString();
                     if (mode == App.Mode.DISTINCT) {
                         assertEquals(
-                            String.format("Private method \"getSecret\"should work with mode==%s: check is distinct", mode.toString()),
+                            String.format("Private method \"getSecret\"should work in mode %s: check is distinct", mode.toString()),
                             secret.length(),
                             List.of(secret.split("")).stream().distinct().collect(Collectors.toList()).size()
                         );
                     }
                     assertTrue(
-                        String.format("Private method \"getSecret\"should work with mode==%s: check number", mode.toString()),
+                        String.format("Private method \"getSecret\"should work in mode %s: check number", mode.toString()),
                         CharMatcher.inRange('0', '9').matchesAllOf(secret)
                     );
                     assertEquals(
-                        String.format("Private method \"getSecret\"should work with mode==%s: check length", mode.toString()),
+                        String.format("Private method \"getSecret\"should work in mode %s: check length", mode.toString()),
                         4, secret.length()
                     );
                 }
