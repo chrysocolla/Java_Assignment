@@ -1,5 +1,9 @@
 # Bulls:ox: & :cow2:Cows
 
+<script id="asciicast-Lu9LzD24OgehKPwNXrQKxYw8S" src="https://asciinema.org/a/Lu9LzD24OgehKPwNXrQKxYw8S.js" async></script>
+
+_上述的文本提示为了兼容asciinema由轻微改动_
+
 就是那个每个有机器人的QQ群都会有的猜数小游戏
 
 ## 目录结构
@@ -29,7 +33,7 @@
 - `gradle run`：运行工程（不适合本项目）
 - `gradle installDist`：生成安装目录
 
-若想查看效果，可运行`gradle installDist`后运行`.\build\install\bulls_and_cows\bin\bulls_and_cows.bat`
+若想在本地查看效果，可运行`gradle installDist`后运行`.\build\install\bulls_and_cows\bin\bulls_and_cows.bat`
 
 加上`-h`或`--help`参数可查看帮助：
 
