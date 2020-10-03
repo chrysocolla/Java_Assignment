@@ -116,11 +116,11 @@ public class App {
         Integer count = 0;
         do {
             while (
-                (
+                !(
                     guess = console.readLine(
                         String.format("请输入猜测(长度%d) > ", secret.length())
                     ).trim()
-                ).length() != secret.length()
+                ).matches(String.format("^\\d{%s}$", secret.length()))
             );
             hint = App.getHint(secret, guess);
             result = hint.equals(String.format("%dA0B", secret.length()));
@@ -158,7 +158,7 @@ public class App {
                         secretString = String.valueOf(
                             console.readPassword(String.format("请输入密文(长度%d) > ", length))
                         ).trim()
-                    ).matches(String.format("^[0-9]{%d}$", length))
+                    ).matches(String.format("^\\d{%d}$", length))
                 );
                 return secretString;
         }
