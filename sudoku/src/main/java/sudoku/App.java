@@ -63,89 +63,104 @@ public class App {
 
     private void runSudoku() {
         try {
-            handlePaint();
-            while (true) {
-                handleRepaint();
-                KeyStroke keyStroke = screen.pollInput();
-                if (keyStroke != null) {
-                    if (keyStroke.getKeyType() == KeyType.Escape || keyStroke.getKeyType() == KeyType.EOF)
-                        break;
-                    switch (keyStroke.getKeyType()) {
-                        case ArrowUp:
-                            plotCursor(cursorCol, cursorRow == 0 ? 0 : cursorRow - 1);
-                            break;
-                        case ArrowDown:
-                            plotCursor(cursorCol, cursorRow == 8 ? 8 : cursorRow + 1);
-                            break;
-                        case ArrowLeft:
-                            plotCursor(cursorCol == 0 ? 0 : cursorCol - 1, cursorRow);
-                            break;
-                        case ArrowRight:
-                            plotCursor(cursorCol == 8 ? 8 : cursorCol + 1, cursorRow);
-                            break;
-                        case Character:
-                            Character character = keyStroke.getCharacter();
-                            if (character >= '0' && character <= '9') {
-                                putNumber(character);
-                            }
-                            break;
-                        default:
-                            break;
-                    }
-                    screen.refresh();
-                    screen.setCursorPosition(null);
-                }
-                Thread.yield();
-            }
+            setup();
+            loop();
         } catch(IOException e) {
-            e.printStackTrace();
+            rescue(e);
         } finally {
-            if(screen != null)
-                try {
-                    screen.close();
-                }
-                catch(IOException e) {
-                    e.printStackTrace();
-                }
+            clean();
         }
     }
 
-    private void handlePaint() throws IOException {
+    private void setup() throws IOException {
         screen = defaultTerminalFactory.createScreen();
-        terminalSize = screen.getTerminalSize();
-        leftTopTerminalPosition = refreshPosition();
         screen.startScreen();
-        screen.setCursorPosition(null);
-        drawSudoku();
+        terminalSize = screen.getTerminalSize();
+        refreshPosition();
+        paintSudoku();
     }
 
-    private void drawSudoku() throws IOException {
+    private void loop() throws IOException {
+        while (handleInput()) handleRepaint();
+    }
+
+    private void rescue(Exception e) {
+        e.printStackTrace();
+    }
+
+    private void clean() {
+        if (screen != null)
+            try {
+                screen.close();
+            } catch (IOException e) {
+                rescue(e);
+            }
+    }
+
+    private void handleRepaint() throws IOException {
+        TerminalSize newTerminalSize = screen.doResizeIfNecessary();
+        if (newTerminalSize != null) {
+            terminalSize = newTerminalSize;
+            refreshPosition();
+            paintSudoku();
+        }
+    }
+
+    private Boolean handleInput() throws IOException {
+        KeyStroke keyStroke = screen.pollInput();
+        if (keyStroke != null) {
+            if (keyStroke.getKeyType() == KeyType.Escape || keyStroke.getKeyType() == KeyType.EOF)
+                return false;
+            switch (keyStroke.getKeyType()) {
+                case ArrowUp:
+                    drawCursor(cursorCol, cursorRow == 0 ? 0 : cursorRow - 1);
+                    break;
+                case ArrowDown:
+                    drawCursor(cursorCol, cursorRow == 8 ? 8 : cursorRow + 1);
+                    break;
+                case ArrowLeft:
+                    drawCursor(cursorCol == 0 ? 0 : cursorCol - 1, cursorRow);
+                    break;
+                case ArrowRight:
+                    drawCursor(cursorCol == 8 ? 8 : cursorCol + 1, cursorRow);
+                    break;
+                case Character:
+                    Character character = keyStroke.getCharacter();
+                    if (character >= '0' && character <= '9') {
+                        putNumber(character);
+                    }
+                    break;
+                default:
+                    break;
+            }
+            screen.refresh();
+            screen.setCursorPosition(null);
+        }
+        Thread.yield();
+        return true;
+    }
+
+    private void paintSudoku() throws IOException {
         screen.clear();
         TextGraphics backgroundTextGraphics = screen.newTextGraphics();
         backgroundTextGraphics.setBackgroundColor(ANSI.BLACK);
         backgroundTextGraphics.setForegroundColor(ANSI.CYAN);
-        if (terminalSize.getColumns() >= MIN_COLS && terminalSize.getRows() >= MIN_ROWS ) {
-            plotGrid(backgroundTextGraphics);
-            plotCursor(cursorCol, cursorRow);
-        }
-        else
-            plotWarning(backgroundTextGraphics);
+        if (terminalSize.getColumns() >= MIN_COLS && terminalSize.getRows() >= MIN_ROWS )
+            drawGrid(backgroundTextGraphics);
+        else drawHint(backgroundTextGraphics);
         screen.refresh();
         screen.setCursorPosition(null);
     }
 
-    private void plotGrid(TextGraphics backgroundTextGraphics) {
+    private void drawGrid(TextGraphics backgroundTextGraphics) {
         backgroundTextGraphics.fillRectangle(leftTopTerminalPosition,
             new TerminalSize(MIN_COLS - 4, MIN_ROWS - 2), ' ');
         backgroundTextGraphics.putString(leftTopTerminalPosition, TOP_BORDER);
         String rowString;
         for (int row = 1; row < MIN_ROWS - 2; row++) {
-            if (row % 6 == 0)
-                rowString = DOUBLE_GRID;
-            else if (row % 2 == 0)
-                rowString = SINGLE_GRID;
-            else
-                rowString = NUMBER_ROW;
+            if (row % 6 == 0) rowString = DOUBLE_GRID;
+            else if (row % 2 == 0) rowString = SINGLE_GRID;
+            else rowString = NUMBER_ROW;
             backgroundTextGraphics.putString(
                 leftTopTerminalPosition.withRelativeRow(row), rowString);
         }
@@ -157,15 +172,16 @@ public class App {
                     backgroundTextGraphics.setCharacter(
                         leftTopTerminalPosition.withRelative(4 * col + 2, 2 * row + 1),
                         (char)('0' + sudokuMap[row][col]));
+        drawCursor(cursorCol, cursorRow);
     }
 
-    private void plotWarning(TextGraphics backgroundTextGraphics) {
+    private void drawHint(TextGraphics backgroundTextGraphics) {
         backgroundTextGraphics.putString(new TerminalPosition(0, 0),
             String.format("终端尺寸过小，请确保至少为38x20（当前为：%dx%d）",
                 terminalSize.getColumns(), terminalSize.getRows()));
     }
 
-    private void plotCursor(int newCursorCol, int newCursorRow) throws IOException {
+    private void drawCursor(int newCursorCol, int newCursorRow) {
         if (newCursorCol != cursorCol || newCursorRow != cursorRow) {
             flipStyle(cursorCol, cursorRow, false);
             cursorCol = newCursorCol;
@@ -203,14 +219,12 @@ public class App {
     }
 
     private void fillStyle(TerminalPosition leftTop, TerminalSize size, ANSI background, ANSI foreground) {
-        for (int row = 0; row < size.getRows(); row++) {
-            for (int col = 0; col < size.getColumns(); col++) {
+        for (int row = 0; row < size.getRows(); row++)
+            for (int col = 0; col < size.getColumns(); col++)
                 screen.setCharacter(leftTop.withRelative(col, row),
                     screen.getBackCharacter(leftTop.withRelative(col, row))
                         .withBackgroundColor(background)
                         .withForegroundColor(foreground));
-            }
-        }
     }
 
     private void putNumber(Character character) {
@@ -221,17 +235,8 @@ public class App {
             new TextCharacter(character).withBackgroundColor(CORE_BACKGROUND).withForegroundColor(CORE_FOREGROUND));
     }
 
-    private void handleRepaint() throws IOException {
-        TerminalSize newTerminalSize = screen.doResizeIfNecessary();
-        if (newTerminalSize != null) {
-            terminalSize = newTerminalSize;
-            leftTopTerminalPosition = refreshPosition();
-            drawSudoku();
-        }
-    }
-
-    private TerminalPosition refreshPosition() {
-        return new TerminalPosition(
+    private void refreshPosition() {
+        leftTopTerminalPosition = new TerminalPosition(
             (terminalSize.getColumns() - MIN_COLS ) / 2,
             (terminalSize.getRows() - MIN_ROWS ) / 2);
     }
