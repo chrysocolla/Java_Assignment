@@ -6,6 +6,14 @@ _上述的文本提示为了兼容asciinema由轻微改动_
 
 就是那个每个有机器人的QQ群都会有的猜数小游戏
 
+## 作业补丁说明
+
+- 为了实现重定向输入，去除了不支持除字符设备（标准输入）的`System.console()`返回的`Console`类对象，而采用`System.out`和`new Scanner(System.in)`实现输入输出；
+- 修改后的`java`文件为`GuessNumber2018210188.java`，主类名`GuessNumber2018210188`，同时还保留了原版所有功能；
+- 重定向后由于不再回显标准输入，因此一些应当出现的空格不会正常出现，出于简洁性考虑此处不做特殊处理；
+- 为便于扩展，使用了内部枚举，生成的类文件有三个；
+- 运行方法为输入命令`java GuessNumber2018210188 [ARGUMENTS]`，若要使用输入重定向则不加参数（即为`java GuessNumber2018210188.java < input.txt`）
+
 ## 目录结构
 
 ``` powershell
