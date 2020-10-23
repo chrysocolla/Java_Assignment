@@ -4,7 +4,6 @@
 package sudoku;
 
 import com.googlecode.lanterna.*;
-import com.googlecode.lanterna.SGR;
 import com.googlecode.lanterna.TextColor.ANSI;
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
@@ -15,8 +14,10 @@ import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import java.io.IOException;
 
 public class App {
-    private static final int MIN_ROWS = 20;
-    private static final int MIN_COLS = 2 * MIN_ROWS;
+    private static final int GRID_ROWS = 19;
+    private static final int GRID_COLS = 37;
+    private static final int CANVAS_ROWS = GRID_ROWS + 3;
+    private static final int CANVAS_COLS = GRID_COLS + 1;
 
     private static final String TOP_BORDER    = "╔═══╤═══╤═══╦═══╤═══╤═══╦═══╤═══╤═══╗";
     private static final String NUMBER_ROW    = "║   ·   ·   ║   ·   ·   ║   ·   ·   ║";
@@ -24,38 +25,36 @@ public class App {
     private static final String DOUBLE_GRID   = "╠═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╣";
     private static final String BOTTOM_BORDER = "╚═══╧═══╧═══╩═══╧═══╧═══╩═══╧═══╧═══╝";
 
-    private static final ANSI BASE_BACKGROUND   = ANSI.BLACK;
-    private static final ANSI BASE_FOREGROUND   = ANSI.CYAN;
-    private static final ANSI COL_BACKGROUND    = ANSI.BLUE;
-    private static final ANSI COL_FOREGROUND    = ANSI.BLACK;
-    private static final ANSI ROW_BACKGROUND    = ANSI.GREEN;
-    private static final ANSI ROW_FOREGROUND    = ANSI.BLACK;
-    private static final ANSI REGION_BACKGROUND = ANSI.MAGENTA;
-    private static final ANSI REGION_FOREGROUND = ANSI.BLACK;
-    private static final ANSI CORE_BACKGROUND   = ANSI.WHITE;
-    private static final ANSI CORE_FOREGROUND   = ANSI.RED;
-    private static final ANSI ERROR_BACKGROUND  = ANSI.RED;
-    private static final ANSI ERROR_FOREGROUND  = ANSI.WHITE;
+    private static final ANSI BASE_BACK   = ANSI.BLACK;
+    private static final ANSI BASE_FORE   = ANSI.CYAN;
+    private static final ANSI COL_BACK    = ANSI.BLUE;
+    private static final ANSI COL_FORE    = ANSI.BLACK;
+    private static final ANSI ROW_BACK    = ANSI.GREEN;
+    private static final ANSI ROW_FORE    = ANSI.BLACK;
+    private static final ANSI REGION_BACK = ANSI.MAGENTA;
+    private static final ANSI REGION_FORE = ANSI.BLACK;
+    private static final ANSI CORE_BACK   = ANSI.WHITE;
+    private static final ANSI CORE_FORE   = ANSI.RED;
+    private static final ANSI ERROR_BACK  = ANSI.RED;
+    private static final ANSI ERROR_FORE  = ANSI.WHITE;
 
     private static final DefaultTerminalFactory defaultTerminalFactory = new DefaultTerminalFactory();
 
     private Screen screen;
     private TerminalSize terminalSize;
-    private TerminalPosition leftTopTerminalPosition;
+    private TerminalPosition leftTopPosition;
 
     private int cursorCol = 4;
     private int cursorRow = 4;
-    private int[][] sudokuMap = {
-        {1, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 2, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 7, 0, 0, 0, 0, 0},
-        {0, 5, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 9, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0, 8}
-    };
+    private int[][] sudokuMap = {{1, 0, 0, 0, 0, 0, 0, 0, 0},
+                                 {0, 2, 0, 0, 0, 0, 0, 0, 0},
+                                 {0, 0, 0, 7, 0, 0, 0, 0, 0},
+                                 {0, 5, 0, 0, 0, 0, 0, 0, 0},
+                                 {0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                 {0, 0, 0, 9, 0, 0, 0, 0, 0},
+                                 {0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                 {0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                 {0, 0, 0, 0, 0, 0, 0, 0, 8}};
 
     public static void main(String[] args) {
         new App().runSudoku();
@@ -65,7 +64,7 @@ public class App {
         try {
             setup();
             loop();
-        } catch(IOException e) {
+        } catch (IOException e) {
             rescue(e);
         } finally {
             clean();
@@ -89,12 +88,7 @@ public class App {
     }
 
     private void clean() {
-        if (screen != null)
-            try {
-                screen.close();
-            } catch (IOException e) {
-                rescue(e);
-            }
+        if (screen != null) try { screen.close(); } catch (IOException e) { rescue(e); }
     }
 
     private void handleRepaint() throws IOException {
@@ -127,7 +121,7 @@ public class App {
                 case Character:
                     Character character = keyStroke.getCharacter();
                     if (character >= '0' && character <= '9') {
-                        putNumber(character);
+                        drawNumber(character);
                     }
                     break;
                 default:
@@ -142,43 +136,41 @@ public class App {
 
     private void paintSudoku() throws IOException {
         screen.clear();
-        TextGraphics backgroundTextGraphics = screen.newTextGraphics();
-        backgroundTextGraphics.setBackgroundColor(ANSI.BLACK);
-        backgroundTextGraphics.setForegroundColor(ANSI.CYAN);
-        if (terminalSize.getColumns() >= MIN_COLS && terminalSize.getRows() >= MIN_ROWS )
-            drawGrid(backgroundTextGraphics);
-        else drawHint(backgroundTextGraphics);
+        TextGraphics gridTextGraphics = screen.newTextGraphics();
+        gridTextGraphics.setBackgroundColor(ANSI.BLACK);
+        gridTextGraphics.setForegroundColor(ANSI.CYAN);
+        if (terminalSize.getColumns() >= CANVAS_COLS && terminalSize.getRows() >= CANVAS_ROWS )
+            drawGrid(gridTextGraphics);
+        else drawHint(gridTextGraphics);
         screen.refresh();
         screen.setCursorPosition(null);
     }
 
-    private void drawGrid(TextGraphics backgroundTextGraphics) {
-        backgroundTextGraphics.fillRectangle(leftTopTerminalPosition,
-            new TerminalSize(MIN_COLS - 4, MIN_ROWS - 2), ' ');
-        backgroundTextGraphics.putString(leftTopTerminalPosition, TOP_BORDER);
+    private void drawGrid(TextGraphics gridTextGraphics) {
+        gridTextGraphics.putString(leftTopPosition, TOP_BORDER);
         String rowString;
-        for (int row = 1; row < MIN_ROWS - 2; row++) {
+        for (int row = 1; row < GRID_ROWS - 1; row++) {
             if (row % 6 == 0) rowString = DOUBLE_GRID;
             else if (row % 2 == 0) rowString = SINGLE_GRID;
             else rowString = NUMBER_ROW;
-            backgroundTextGraphics.putString(
-                leftTopTerminalPosition.withRelativeRow(row), rowString);
+            gridTextGraphics.putString(
+                leftTopPosition.withRelativeRow(row), rowString);
         }
-        backgroundTextGraphics.putString(
-            leftTopTerminalPosition.withRelativeRow(MIN_ROWS - 2), BOTTOM_BORDER);
+        gridTextGraphics.putString(
+            leftTopPosition.withRelativeRow(GRID_ROWS - 1), BOTTOM_BORDER);
         for (int row = 0; row < sudokuMap.length; row++)
             for (int col = 0; col < sudokuMap[row].length; col++)
                 if (sudokuMap[row][col] > 0)
-                    backgroundTextGraphics.setCharacter(
-                        leftTopTerminalPosition.withRelative(4 * col + 2, 2 * row + 1),
+                    gridTextGraphics.setCharacter(
+                        leftTopPosition.withRelative(4 * col + 2, 2 * row + 1),
                         (char)('0' + sudokuMap[row][col]));
         drawCursor(cursorCol, cursorRow);
     }
 
-    private void drawHint(TextGraphics backgroundTextGraphics) {
-        backgroundTextGraphics.putString(new TerminalPosition(0, 0),
-            String.format("终端尺寸过小，请确保至少为38x20（当前为：%dx%d）",
-                terminalSize.getColumns(), terminalSize.getRows()));
+    private void drawHint(TextGraphics gridTextGraphics) {
+        gridTextGraphics.putString(new TerminalPosition(0, 0),
+            String.format("终端尺寸过小，请确保至少为%dx%d（当前为：%dx%d）",
+                CANVAS_COLS, CANVAS_ROWS, terminalSize.getColumns(), terminalSize.getRows()));
     }
 
     private void drawCursor(int newCursorCol, int newCursorRow) {
@@ -191,53 +183,45 @@ public class App {
     }
 
     private void flipStyle(int cursorCol, int cursorRow, Boolean stylish) {
-        fillStyle(
-            leftTopTerminalPosition.withRelative(0, 2 * cursorRow + 1),
-            new TerminalSize(MIN_COLS - 3, 1),
-            stylish ? ROW_BACKGROUND : BASE_BACKGROUND,
-            stylish ? ROW_FOREGROUND : BASE_FOREGROUND
-        );
-        fillStyle(
-            leftTopTerminalPosition.withRelative(4 * cursorCol + 1, 0),
-            new TerminalSize(3, MIN_ROWS - 1),
-            stylish ? COL_BACKGROUND : BASE_BACKGROUND,
-            stylish ? COL_FOREGROUND : BASE_FOREGROUND
-        );
-        fillStyle(
-            leftTopTerminalPosition
-                .withRelative(12 * Math.floorDiv(cursorCol, 3) + 1, 6 * Math.floorDiv(cursorRow, 3) + 1),
-            new TerminalSize(11, 5),
-            stylish ? REGION_BACKGROUND : BASE_BACKGROUND,
-            stylish ? REGION_FOREGROUND : BASE_FOREGROUND
-        );
-        fillStyle(
-            leftTopTerminalPosition.withRelative(4 * cursorCol + 1, 2 * cursorRow + 1),
-            new TerminalSize(3, 1),
-            stylish ? CORE_BACKGROUND : BASE_BACKGROUND,
-            stylish ? CORE_FOREGROUND : BASE_FOREGROUND
-        );
+        fillStyle(0, 2 * cursorRow + 1, GRID_COLS, 1, ROW_BACK, ROW_FORE, stylish);
+        fillStyle(4 * cursorCol + 1, 0, 3, GRID_ROWS, COL_BACK, COL_FORE, stylish);
+        fillStyle(12 * (cursorCol / 3) + 1, 6 * (cursorRow / 3) + 1, 11, 5, REGION_BACK, REGION_FORE, stylish);
+        fillStyle(4 * cursorCol + 1, 2 * cursorRow + 1, 3, 1, CORE_BACK, CORE_FORE, stylish);
+        int currentNumber = sudokuMap[cursorRow][cursorCol];
+        if (stylish && currentNumber != 0) {
+            for (int row = 0; row < sudokuMap.length; row++)
+                if (currentNumber == sudokuMap[row][cursorCol] && row != cursorRow)
+                    fillStyle(4 * cursorCol + 1, 2 * row + 1, 3, 1, ERROR_BACK, ERROR_FORE, stylish);
+            for (int col = 0; col < sudokuMap[cursorRow].length; col++)
+                if (currentNumber == sudokuMap[cursorRow][col] && col != cursorCol)
+                    fillStyle(4 * col + 1, 2 * cursorRow + 1, 3, 1, ERROR_BACK, ERROR_FORE, stylish);
+            for (int row = 3 * (cursorRow / 3); row < 3 * (cursorRow / 3) + 3; row++)
+                for (int col = 3 * (cursorCol / 3); col < 3 * (cursorCol / 3) + 3 ; col++)
+                    if (currentNumber == sudokuMap[row][col] && row != cursorRow && col != cursorCol)
+                        fillStyle(4 * col + 1, 2 * row + 1, 3, 1, ERROR_BACK, ERROR_FORE, stylish);
+        }
     }
 
-    private void fillStyle(TerminalPosition leftTop, TerminalSize size, ANSI background, ANSI foreground) {
-        for (int row = 0; row < size.getRows(); row++)
-            for (int col = 0; col < size.getColumns(); col++)
-                screen.setCharacter(leftTop.withRelative(col, row),
-                    screen.getBackCharacter(leftTop.withRelative(col, row))
-                        .withBackgroundColor(background)
-                        .withForegroundColor(foreground));
+    private void fillStyle(int left, int top, int deltaX, int deltaY, ANSI back, ANSI fore, Boolean stylish) {
+        for (int row = top; row < top + deltaY; row++)
+            for (int col = left; col < left + deltaX; col++)
+                screen.setCharacter(leftTopPosition.withRelative(col, row),
+                    screen.getBackCharacter(leftTopPosition.withRelative(col, row))
+                        .withBackgroundColor(stylish ? back : BASE_BACK)
+                        .withForegroundColor(stylish ? fore : BASE_FORE));
     }
 
-    private void putNumber(Character character) {
+    private void drawNumber(Character character) {
         sudokuMap[cursorRow][cursorCol] = character - '0';
-        if (character == '0')
-            character = ' ';
-        screen.setCharacter(leftTopTerminalPosition.withRelative(4 *cursorCol + 2, 2 * cursorRow + 1),
-            new TextCharacter(character).withBackgroundColor(CORE_BACKGROUND).withForegroundColor(CORE_FOREGROUND));
+        if (character == '0') character = ' ';
+        screen.setCharacter(leftTopPosition.withRelative(4 *cursorCol + 2, 2 * cursorRow + 1),
+            new TextCharacter(character));
+        drawCursor(cursorCol, cursorRow);
     }
 
     private void refreshPosition() {
-        leftTopTerminalPosition = new TerminalPosition(
-            (terminalSize.getColumns() - MIN_COLS ) / 2,
-            (terminalSize.getRows() - MIN_ROWS ) / 2);
+        leftTopPosition = new TerminalPosition(
+            (terminalSize.getColumns() - CANVAS_COLS) / 2,
+            (terminalSize.getRows() - CANVAS_ROWS) / 2 + 1);
     }
 }
