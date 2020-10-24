@@ -6,6 +6,8 @@ __:computer: 是Java作业文件仓库！__
 
 - [Bulls :ox: & :cow2: Cows](bulls_and_cows/README.md)
 
+- [Sudoku :diamond_shape_with_a_dot_inside:](sudoku/README.md)
+
 # :smirk_cat: 尝试夹带私货：
 
 - [:movie_camera: BiliRush](https://github.com/chrysocolla/BiliRush)：HTML5视频变速Chrome插件
