@@ -36,3 +36,13 @@ application {
     // Define the main class for the application.
     mainClassName = 'sudoku.App'
 }
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+}
+
+startScripts {
+    def templateName = 'windowsStartScript.txt'
+    assert project.file(templateName).exists()
+    windowsStartScriptGenerator.template = resources.text.fromFile(templateName)
+}
