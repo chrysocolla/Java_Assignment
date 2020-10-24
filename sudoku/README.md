@@ -13,15 +13,19 @@ lanterna会在不支持标准输出的终端下弹出一个Swing实现的终端�
 下面给出样例：
 
 ![](sudoku_archlinux_kde_konsole_yakuake.png)
+
 _在Arch Linux/KDE下使用基于Konsole的下拉终端yakuake测试，可以良好地隐藏光标，此图还展示了提示重复数字的功能_
 
 ![](sudoku_archlinux_kde_swing_terminal_frame.png)
+
 _在Arch Linux/KDE下使用自带的fallback选项SwingTerminalFrame作为终端模拟器，字体较小但也能良好地隐藏光标_
 
 ![](sudoku_windows_10_swing_terminal_frame.png)
+
 _在Windows10下使用自带的fallback选项SwingTerminalFrame作为终端模拟器，字体较小显示模糊，能良好地隐藏光标_
 
 ![](sudoku_windows_10_vscode_integraded_terminal.png)
+
 _在Windows10下使用VSCode集成终端作为终端模拟器，字体清晰颜色鲜艳，不能隐藏光标_
 
 ## 目录结构
