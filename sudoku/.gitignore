@@ -9,3 +9,11 @@ bin
 
 # Ignore VSCode configurations
 .vscode
+
+# Ignore VSCode Java extension settings
+*/.settings
+
+# Ignore sudoku autosave and save files
+.sudoku.autosave
+*.dat
+

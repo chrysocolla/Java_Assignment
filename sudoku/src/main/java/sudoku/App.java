@@ -11,10 +11,21 @@ import com.googlecode.lanterna.input.KeyType;
 import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 public class App {
+
+    enum Direction { Left, Right; }
+    enum Mode { Game, Save, Load; }
+
     private static final int GRID_ROWS = 19;
     private static final int GRID_COLS = 37;
     private static final int CANVAS_ROWS = GRID_ROWS + 3;
@@ -25,6 +36,17 @@ public class App {
     private static final String SINGLE_GRID   = "╟───┼───┼───╫───┼───┼───╫───┼───┼───╢";
     private static final String DOUBLE_GRID   = "╠═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╣";
     private static final String BOTTOM_BORDER = "╚═══╧═══╧═══╩═══╧═══╧═══╩═══╧═══╧═══╝";
+
+    private static final String AUTO_SAVE_FILE = ".sudoku.autosave";
+
+    private static final Map<Mode, String> PROMPT = new HashMap<Mode, String>() {
+        private static final long serialVersionUID = 1L;
+        {
+            put(Mode.Game, "");
+            put(Mode.Save, "saving to: ");
+            put(Mode.Load, "load from: ");
+        }
+    };
 
     private static final ANSI BASE_BACK   = ANSI.BLACK;
     private static final ANSI BASE_FORE   = ANSI.CYAN;
@@ -41,6 +63,14 @@ public class App {
 
     private static final DefaultTerminalFactory defaultTerminalFactory = new DefaultTerminalFactory();
 
+    private static final int[][] LINE = {{-2, -1, GRID_COLS + 1, -1},
+                                        {-2, GRID_ROWS + 1, GRID_COLS + 1, GRID_ROWS + 1},
+                                        {-2, 0, -2, GRID_ROWS},
+                                        {-1, 0, -1, GRID_ROWS},
+                                        {GRID_COLS, 0, GRID_COLS, GRID_ROWS},
+                                        {GRID_COLS + 1, 0, GRID_COLS + 1, GRID_ROWS}};
+
+    private int editIndex = 0;
     private int cursorCol = 4;
     private int cursorRow = 4;
     private int[][] sudokuMap = {{0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -52,6 +82,9 @@ public class App {
                                 {0, 0, 0, 0, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 0, 0, 0, 0, 0}};
+
+    private Mode gamemode = Mode.Load;
+    private StringBuilder savename = new StringBuilder();
 
     private Screen screen;
     private TerminalSize terminalSize;
@@ -78,6 +111,7 @@ public class App {
         screen.startScreen();
         terminalSize = screen.getTerminalSize();
         refreshPosition();
+        autoLoad();
         paintSudoku();
     }
 
@@ -90,7 +124,7 @@ public class App {
     }
 
     private void clean() {
-        if (screen != null) try { screen.close(); } catch (IOException e) { rescue(e); }
+        if (screen != null) try { screen.close(); autoSave();} catch (Exception e) { rescue(e); }
     }
 
     private void handleRepaint() throws IOException {
@@ -105,32 +139,136 @@ public class App {
     private Boolean handleInput() throws IOException {
         KeyStroke keyStroke = screen.pollInput();
         if (keyStroke != null) {
-            if (keyStroke.getKeyType() == KeyType.Escape || keyStroke.getKeyType() == KeyType.EOF)
-                return false;
-            switch (keyStroke.getKeyType()) {
-                case ArrowUp:
-                    drawCursor(0, cursorRow == 0 ? 0 : -1);
-                    break;
-                case ArrowDown:
-                    drawCursor(0, cursorRow == 8 ? 0 : 1);
-                    break;
-                case ArrowLeft:
-                    drawCursor(cursorCol == 0 ? 0 : -1, 0);
-                    break;
-                case ArrowRight:
-                    drawCursor(cursorCol == 8 ? 0 : 1, 0);
-                    break;
-                case Character:
-                    Character character = keyStroke.getCharacter();
-                    if (character >= '0' && character <= '9') inputNumber(character);
-                    else if (character == 'r') inputReset();
-                default:
+            KeyType keyType = keyStroke.getKeyType();
+            if (gamemode.equals(Mode.Game)) {
+                switch (keyType) {
+                    case EOF:
+                    case Escape: return false;
+                    case ArrowUp: drawCursor(0, -1); break;
+                    case ArrowDown: drawCursor(0, 1); break;
+                    case ArrowLeft: drawCursor(-1, 0); break;
+                    case ArrowRight: drawCursor(1, 0); break;
+                    case Character:
+                        Character character = keyStroke.getCharacter();
+                        switch (character) {
+                            case 's': toggleMode(Mode.Save); break;
+                            case 'l': toggleMode(Mode.Load); break;
+                            case 'r': inputReset(); break;
+                            default: if (character >= '0' && character <= '9') inputNumber(character);
+                        }
+                    default:
+                }
+            } else {
+                switch (keyType) {
+                    case EOF: return false;
+                    case Escape: toggleMode(Mode.Game); break;
+                    case Backspace: deleteChar(Direction.Left); break;
+                    case Delete: deleteChar(Direction.Right); break;
+                    case ArrowLeft: moveIndex(Direction.Left); break;
+                    case ArrowRight: moveIndex(Direction.Right); break;
+                    case Character: insertChar(keyStroke.getCharacter()); break;
+                    case Enter: submitEdit();
+                    default:
+                }
             }
             screen.refresh();
-            screen.setCursorPosition(null);
         }
         Thread.yield();
         return true;
+    }
+
+    private void autoSave() {
+        gamemode = Mode.Save;
+        File saveFile = new File(AUTO_SAVE_FILE);
+        try {
+            Boolean created = saveFile.createNewFile();
+            try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(saveFile))) {
+                oos.writeObject(sudokuMap);
+            } catch (Exception e) {
+                if (created) saveFile.delete();
+            }
+        } catch (Exception e) { }
+    }
+
+    private void autoLoad() {
+        File saveFile = new File(AUTO_SAVE_FILE);
+        try {
+            Boolean created = saveFile.createNewFile();
+            try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(saveFile))) {
+                sudokuMap = (int[][]) ois.readObject();
+            } catch (Exception e) {
+                if (created) saveFile.delete();
+            }
+        } catch (Exception e) { }
+        gamemode = Mode.Game;
+        savename = new StringBuilder();
+        editIndex = 0;
+    }
+
+    private void submitEdit() {
+        File saveFile = new File(savename.toString() + ".dat");
+        Boolean created = false;
+        try {
+            created = saveFile.createNewFile();
+        } catch (IOException e) { }
+        switch (gamemode) {
+            case Save:
+                try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(saveFile))) {
+                    oos.writeObject(sudokuMap);
+                    toggleMode(Mode.Game);
+                    drawPrompt("               Success!");
+                } catch (Exception e) {
+                    drawPrompt("            Failed to save.");
+                    if (created) saveFile.delete();
+                }
+                break;
+            case Load:
+                try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(saveFile))) {
+                    sudokuMap = (int[][]) ois.readObject();
+                    gamemode = Mode.Game;
+                    drawSudoku();
+                    drawPrompt("               Success!");
+                } catch (Exception e) {
+                    drawPrompt("            Failed to load.");
+                    if (created) saveFile.delete();
+                }
+            default:
+        }
+        screen.setCursorPosition(null);
+    }
+
+    private void toggleMode(Mode newMode) {
+        gamemode = newMode;
+        savename = new StringBuilder();
+        editIndex = 0;
+        if (gamemode.equals(Mode.Game)) drawHint(); else drawPrompt();
+    }
+
+    private void deleteChar(Direction direction) {
+        switch (direction) {
+            case Left: if (editIndex > 0) savename.deleteCharAt(editIndex-- - 1); break;
+            case Right: if (editIndex < savename.length()) savename.deleteCharAt(editIndex);
+        }
+        drawPrompt();
+    }
+
+    private void moveIndex(Direction direction) {
+        switch (direction) {
+            case Left: editIndex = Math.max(0, --editIndex); break;
+            case Right: editIndex = Math.min(Math.min(GRID_COLS - PROMPT.get(gamemode).length(), savename.length()), ++editIndex);
+        }
+        drawPrompt();
+    }
+
+    private void insertChar(char character) {
+        if (savename.length() < GRID_COLS - PROMPT.get(gamemode).length()) savename.insert(editIndex++, character);
+        drawPrompt();
+    }
+
+    private void inputReset() {
+        for (int[] is : sudokuMap) Arrays.fill(is, 0);
+        drawBoard();
+        drawCursor();
     }
 
     private void inputNumber(Character character) {
@@ -138,13 +276,8 @@ public class App {
         if (character == '0') character = ' ';
         screen.setCharacter(leftTopPosition.withRelative(4 *cursorCol + 2, 2 * cursorRow + 1),
             new TextCharacter(character));
-        drawCursor(0, 0);
-    }
-
-    private void inputReset() {
-        for (int[] is : sudokuMap) Arrays.fill(is, 0);
-        drawBoard();
-        drawCursor(0, 0);
+        drawHint();
+        drawCursor();
     }
 
     private void paintSudoku() throws IOException {
@@ -152,18 +285,17 @@ public class App {
         gridTextGraphics = screen.newTextGraphics();
         gridTextGraphics.setBackgroundColor(ANSI.BLACK);
         gridTextGraphics.setForegroundColor(ANSI.CYAN);
-        if (terminalSize.getColumns() >= CANVAS_COLS && terminalSize.getRows() >= CANVAS_ROWS )
+        if (terminalSize.getColumns() >= CANVAS_COLS && terminalSize.getRows() >= CANVAS_ROWS)
             drawSudoku();
         else drawWarning();
         screen.refresh();
-        screen.setCursorPosition(null);
     }
 
     private void drawSudoku() {
         drawBoard();
         drawPiece();
         drawHint();
-        drawCursor(0, 0);
+        drawCursor();
     }
 
     private void drawBoard() {
@@ -190,21 +322,34 @@ public class App {
     }
 
     private void drawHint() {
-        gridTextGraphics.drawLine(leftTopPosition.withRelative(-2, -1), leftTopPosition.withRelative(38, -1), '▓');
-        gridTextGraphics.drawLine(leftTopPosition.withRelative(-2, 20), leftTopPosition.withRelative(38, 20), '▓');
-        gridTextGraphics.drawLine(leftTopPosition.withRelative(-2, 0), leftTopPosition.withRelative(-2, 19), '▓');
-        gridTextGraphics.drawLine(leftTopPosition.withRelative(-1, 0), leftTopPosition.withRelative(-1, 19), '▓');
-        gridTextGraphics.drawLine(leftTopPosition.withRelative(37, 0), leftTopPosition.withRelative(37, 19), '▓');
-        gridTextGraphics.drawLine(leftTopPosition.withRelative(38, 0), leftTopPosition.withRelative(38, 19), '▓');
-        gridTextGraphics.putString(leftTopPosition.withRelative(0, 19), "Esc退出|r重置|1-9输入|0 清空|↑↓←→导航");
+        for (int[] is : LINE)
+            gridTextGraphics.drawLine(leftTopPosition.withRelative(is[0], is[1]),
+                leftTopPosition.withRelative(is[2], is[3]), '▓');
+        gridTextGraphics.putString(leftTopPosition.withRelative(0, GRID_ROWS), "Esc退出|r重置|1-9输入|0 清空|↑↓←→导航");
+        gridTextGraphics.putString(leftTopPosition.withRelative(4, GRID_ROWS + 1), "s保存|l载入|Enter确定|Esc取消");
+        screen.setCursorPosition(null);
+    }
+
+    private void drawPrompt(String content) {
+        gridTextGraphics.putString(leftTopPosition.withRelative(0, -1), String.format("%1$-" + GRID_COLS + "s", content));
+        screen.setCursorPosition(leftTopPosition.withRelative(0 + PROMPT.get(gamemode).length() + editIndex, -1));
+    }
+
+    private void drawPrompt() {
+        drawPrompt(PROMPT.get(gamemode) + savename.toString());
     }
 
     private void drawCursor(int deltaCol, int deltaRow) {
-        if (deltaCol != 0 || deltaRow != 0) {
-            flipStyle(false);
-            cursorCol += deltaCol;
-            cursorRow += deltaRow;
-        }
+        if (cursorCol == 8 && deltaCol > 0 || cursorCol == 0 && deltaCol < 0) deltaCol = 0;
+        if (cursorRow == 8 && deltaRow > 0 || cursorRow == 0 && deltaRow < 0) deltaRow = 0;
+        if (deltaCol != 0 || deltaRow != 0) flipStyle(false);
+        cursorCol += deltaCol;
+        cursorRow += deltaRow;
+        flipStyle(true);
+        drawHint();
+    }
+
+    private void drawCursor() {
         flipStyle(true);
     }
 
