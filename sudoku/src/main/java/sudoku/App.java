@@ -9,91 +9,120 @@ import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import com.googlecode.lanterna.screen.Screen;
+import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
+import com.googlecode.lanterna.terminal.swing.AWTTerminalFontConfiguration;
+import com.googlecode.lanterna.terminal.swing.SwingTerminalFrame;
 
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.event.MouseInputAdapter;
+
 public class App {
 
-    enum Direction { Left, Right; }
-    enum Mode { Game, Save, Load; }
+    enum Direction {Left, Right;}
+    enum Mode {Prep, Game, Save, Load;}
 
-    private static final int GRID_ROWS = 19;
-    private static final int GRID_COLS = 37;
-    private static final int CANVAS_ROWS = GRID_ROWS + 3;
-    private static final int CANVAS_COLS = GRID_COLS + 4;
+    private static final int GRID_ROWS = 19, GRID_COLS = 37, CANVAS_ROWS = GRID_ROWS + 3, CANVAS_COLS = GRID_COLS + 4;
 
-    private static final String TOP_BORDER    = "╔═══╤═══╤═══╦═══╤═══╤═══╦═══╤═══╤═══╗";
-    private static final String NUMBER_ROW    = "║   ·   ·   ║   ·   ·   ║   ·   ·   ║";
-    private static final String SINGLE_GRID   = "╟───┼───┼───╫───┼───┼───╫───┼───┼───╢";
-    private static final String DOUBLE_GRID   = "╠═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╣";
-    private static final String BOTTOM_BORDER = "╚═══╧═══╧═══╩═══╧═══╧═══╩═══╧═══╧═══╝";
+    private static final String TOP_BORDER      = "╔═══╤═══╤═══╦═══╤═══╤═══╦═══╤═══╤═══╗",
+                                NUMBER_ROW      = "║   ·   ·   ║   ·   ·   ║   ·   ·   ║",
+                                SINGLE_GRID     = "╟───┼───┼───╫───┼───┼───╫───┼───┼───╢",
+                                DOUBLE_GRID     = "╠═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╣",
+                                BOTTOM_BORDER   = "╚═══╧═══╧═══╩═══╧═══╧═══╩═══╧═══╧═══╝";
 
-    private static final String AUTO_SAVE_FILE = ".sudoku.autosave";
+    private static final String AUTO_SAVE_FILE = ".sudoku.autosave", PUZZLE_FILE_1 = ".sudoku.puzzle.1", PUZZLE_FILE_2 = ".sudoku.puzzle.2";
 
-    private static final Map<Mode, String> PROMPT = new HashMap<Mode, String>() {
-        private static final long serialVersionUID = 1L;
-        {
-            put(Mode.Game, "");
-            put(Mode.Save, "saving to: ");
-            put(Mode.Load, "load from: ");
-        }
-    };
+    private static final Map<Mode, String> PROMPT=new HashMap<Mode,String>(){private static final long serialVersionUID=1L;{put(Mode.Prep,"         Prepare your puzzle.");put(Mode.Game,"                Start!");put(Mode.Save,"saving to: ");put(Mode.Load,"load from: ");}};
 
-    private static final ANSI BASE_BACK   = ANSI.BLACK;
-    private static final ANSI BASE_FORE   = ANSI.CYAN;
-    private static final ANSI COL_BACK    = ANSI.BLUE;
-    private static final ANSI COL_FORE    = ANSI.BLACK;
-    private static final ANSI ROW_BACK    = ANSI.GREEN;
-    private static final ANSI ROW_FORE    = ANSI.BLACK;
-    private static final ANSI REGION_BACK = ANSI.MAGENTA;
-    private static final ANSI REGION_FORE = ANSI.BLACK;
-    private static final ANSI CORE_BACK   = ANSI.WHITE;
-    private static final ANSI CORE_FORE   = ANSI.RED;
-    private static final ANSI ERROR_BACK  = ANSI.RED;
-    private static final ANSI ERROR_FORE  = ANSI.WHITE;
+    private static final ANSI   BASE_BACK   = ANSI.BLACK,   BASE_FORE   = ANSI.CYAN,
+                                COL_BACK    = ANSI.BLUE,    COL_FORE    = ANSI.BLACK,
+                                ROW_BACK    = ANSI.GREEN,   ROW_FORE    = ANSI.BLACK,
+                                REGION_BACK = ANSI.MAGENTA, REGION_FORE = ANSI.BLACK,
+                                CORE_BACK   = ANSI.WHITE,   CORE_FORE   = ANSI.RED,
+                                MASK_BACK   = ANSI.YELLOW,  MASK_FORE   = ANSI.RED,
+                                ERROR_BACK  = ANSI.RED,     ERROR_FORE  = ANSI.WHITE;
 
     private static final DefaultTerminalFactory defaultTerminalFactory = new DefaultTerminalFactory();
 
-    private static final int[][] LINE = {{-2, -1, GRID_COLS + 1, -1},
-                                        {-2, GRID_ROWS + 1, GRID_COLS + 1, GRID_ROWS + 1},
-                                        {-2, 0, -2, GRID_ROWS},
-                                        {-1, 0, -1, GRID_ROWS},
-                                        {GRID_COLS, 0, GRID_COLS, GRID_ROWS},
-                                        {GRID_COLS + 1, 0, GRID_COLS + 1, GRID_ROWS}};
+    {
+        defaultTerminalFactory.setTerminalEmulatorTitle("Sudoku Game - by chrysocolla（王若禹|2018210188）").setTerminalEmulatorFontConfiguration(AWTTerminalFontConfiguration.getDefaultOfSize(20));
+    }
 
-    private int editIndex = 0;
-    private int cursorCol = 4;
-    private int cursorRow = 4;
-    private int[][] sudokuMap = {{0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0}};
+    private static final int[][] LINE = { { -2, -1, GRID_COLS + 1, -1 }, { -2, GRID_ROWS + 1, GRID_COLS + 1, GRID_ROWS + 1 }, { -2, 0, -2, GRID_ROWS }, { -1, 0, -1, GRID_ROWS }, { GRID_COLS, 0, GRID_COLS, GRID_ROWS }, { GRID_COLS + 1, 0, GRID_COLS + 1, GRID_ROWS } };
 
-    private Mode gamemode = Mode.Load;
+    private int editIndex = 0, cursorCol = 4, cursorRow = 4;
+    private int[][] sudokuMask = { { 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+                    sudokuGame = { { 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },{ 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
+
+    private Mode gamemode = Mode.Prep;
     private StringBuilder savename = new StringBuilder();
+
+    private JMenuItem   menuPuzzle1Load = new JMenuItem("载入(L)"), menuPuzzle1Save = new JMenuItem("保存(S)"),
+                        menuPuzzle2Load = new JMenuItem("载入(L)"), menuPuzzle2Save = new JMenuItem("保存(S)"),
+                        menuFileLoad    = new JMenuItem("载入(L)"), menuFileSave    = new JMenuItem("保存(S)");
+    private JMenu       menuPuzzle1     = new JMenu("题目1(1)"),
+                        menuPuzzle2     = new JMenu("题目2(2)"),
+                        menuPuzzles     = new JMenu("题目(P)"),
+                        menuFiles       = new JMenu("存盘(F)");
+    private JMenuBar    menuBar = new JMenuBar();
+    private SwingTerminalFrame terminal = defaultTerminalFactory.createSwingTerminal();
+
+    private MouseInputAdapter ToggleMode(Mode mode) {
+        return new MouseInputAdapter() {
+            @Override public void mousePressed(MouseEvent e) {
+                super.mouseClicked(e); toggleMode(mode); try { screen.refresh(); } catch (Exception ex) { }
+            }
+        };
+    }
+
+    private MouseInputAdapter SavePuzzle(String filename) {
+        return new MouseInputAdapter() {
+            @Override public void mousePressed(MouseEvent e) {
+                super.mouseClicked(e); saveFile(filename);
+            }
+        };
+    }
+
+    private MouseInputAdapter LoadPuzzle(String filename) {
+        return new MouseInputAdapter() {
+            @Override public void mousePressed(MouseEvent e) {
+                super.mouseClicked(e); loadFile(filename); drawSudoku(); try { screen.refresh(); } catch (Exception ex) { }
+            }
+        };
+    }
+
+    {
+        menuPuzzle1Load.setMnemonic('L');   menuPuzzle1Load.addMouseListener(LoadPuzzle(PUZZLE_FILE_1));
+        menuPuzzle1Save.setMnemonic('S');   menuPuzzle1Save.addMouseListener(SavePuzzle(PUZZLE_FILE_1));
+        menuPuzzle2Load.setMnemonic('L');   menuPuzzle2Load.addMouseListener(LoadPuzzle(PUZZLE_FILE_2));
+        menuPuzzle2Save.setMnemonic('S');   menuPuzzle2Save.addMouseListener(SavePuzzle(PUZZLE_FILE_2));
+        menuFileLoad.   setMnemonic('L');   menuFileLoad.   addMouseListener(ToggleMode(Mode.Load));
+        menuFileSave.   setMnemonic('S');   menuFileSave.   addMouseListener(ToggleMode(Mode.Save));
+        menuPuzzle1.    setMnemonic('1');   menuPuzzle1.    add(menuPuzzle1Load);   menuPuzzle1.add(menuPuzzle1Save);
+        menuPuzzle2.    setMnemonic('2');   menuPuzzle2.    add(menuPuzzle2Load);   menuPuzzle2.add(menuPuzzle2Save);
+        menuPuzzles.    setMnemonic('P');   menuPuzzles.    add(menuPuzzle1);       menuPuzzles.add(menuPuzzle2);
+        menuFiles.      setMnemonic('F');   menuFiles.      add(menuFileLoad);      menuFiles.  add(menuFileSave);
+        menuBar.add(menuPuzzles);           menuBar.        add(menuFiles);         terminal.   setJMenuBar(menuBar);
+    }
 
     private Screen screen;
     private TerminalSize terminalSize;
     private TerminalPosition leftTopPosition;
     private TextGraphics gridTextGraphics;
 
-    public static void main(String[] args) {
-        new App().runSudoku();
-    }
+    public static void main(String[] args) {new App().runSudoku();}
 
     private void runSudoku() {
         try {
@@ -106,25 +135,19 @@ public class App {
         }
     }
 
-    private void setup() throws IOException {
-        screen = defaultTerminalFactory.createScreen();
+    private void setup() throws IOException {makeWindow();refreshPosition();autoLoad();paintSudoku();}
+
+    private void loop() throws IOException {while(handleInput())handleRepaint();}
+
+    private void rescue(Exception e) {e.printStackTrace();}
+
+    private void clean() {if(screen != null)try{screen.close();autoSave();}catch(Exception e){rescue(e);}}
+
+    private void makeWindow() throws IOException {
+        terminal.setVisible(true);
+        screen = new TerminalScreen(terminal);
         screen.startScreen();
         terminalSize = screen.getTerminalSize();
-        refreshPosition();
-        autoLoad();
-        paintSudoku();
-    }
-
-    private void loop() throws IOException {
-        while (handleInput()) handleRepaint();
-    }
-
-    private void rescue(Exception e) {
-        e.printStackTrace();
-    }
-
-    private void clean() {
-        if (screen != null) try { screen.close(); autoSave();} catch (Exception e) { rescue(e); }
     }
 
     private void handleRepaint() throws IOException {
@@ -140,36 +163,53 @@ public class App {
         KeyStroke keyStroke = screen.pollInput();
         if (keyStroke != null) {
             KeyType keyType = keyStroke.getKeyType();
-            if (gamemode.equals(Mode.Game)) {
-                switch (keyType) {
-                    case EOF:
-                    case Escape: return false;
-                    case ArrowUp: drawCursor(0, -1); break;
-                    case ArrowDown: drawCursor(0, 1); break;
-                    case ArrowLeft: drawCursor(-1, 0); break;
-                    case ArrowRight: drawCursor(1, 0); break;
-                    case Character:
-                        Character character = keyStroke.getCharacter();
-                        switch (character) {
-                            case 's': toggleMode(Mode.Save); break;
-                            case 'l': toggleMode(Mode.Load); break;
-                            case 'r': inputReset(); break;
-                            default: if (character >= '0' && character <= '9') inputNumber(character);
-                        }
-                    default:
-                }
-            } else {
-                switch (keyType) {
-                    case EOF: return false;
-                    case Escape: toggleMode(Mode.Game); break;
-                    case Backspace: deleteChar(Direction.Left); break;
-                    case Delete: deleteChar(Direction.Right); break;
-                    case ArrowLeft: moveIndex(Direction.Left); break;
-                    case ArrowRight: moveIndex(Direction.Right); break;
-                    case Character: insertChar(keyStroke.getCharacter()); break;
-                    case Enter: submitEdit();
-                    default:
-                }
+            switch (gamemode) {
+                case Prep:
+                    switch (keyType) {
+                        case EOF:
+                        case Escape:        return false;
+                        case ArrowUp:       drawCursor(0, -1);      break;
+                        case ArrowDown:     drawCursor(0, 1);       break;
+                        case ArrowLeft:     drawCursor(-1, 0);      break;
+                        case ArrowRight:    drawCursor(1, 0);       break;
+                        case Enter:         toggleMode(Mode.Game);  break;
+                        case Character:
+                            Character character = keyStroke.getCharacter();
+                            if (character >= '0' && character <= '9') inputMask(character);
+                        default:
+                    }
+                    break;
+                case Game:
+                    switch (keyType) {
+                        case EOF:
+                        case Escape:        return false;
+                        case ArrowUp:       drawCursor(0, -1);      break;
+                        case ArrowDown:     drawCursor(0, 1);       break;
+                        case ArrowLeft:     drawCursor(-1, 0);      break;
+                        case ArrowRight:    drawCursor(1, 0);       break;
+                        case Character:
+                            Character character = keyStroke.getCharacter();
+                            switch (character) {
+                                case 's':   toggleMode(Mode.Save);  break;
+                                case 'l':   toggleMode(Mode.Load);  break;
+                                case 'p':   toggleMode(Mode.Prep);  break;
+                                default: if (character >= '0' && character <= '9') inputNumber(character);
+                            }
+                        default:
+                    }
+                    break;
+                case Save: case Load:
+                    switch (keyType) {
+                        case EOF:           return false;
+                        case Escape:        toggleMode(Mode.Game);                  break;
+                        case Backspace:     deleteChar(Direction.Left);             break;
+                        case Delete:        deleteChar(Direction.Right);            break;
+                        case ArrowLeft:     moveIndex(Direction.Left);              break;
+                        case ArrowRight:    moveIndex(Direction.Right);             break;
+                        case Character:     insertChar(keyStroke.getCharacter());   break;
+                        case Enter:         submitEdit();
+                        default:
+                    }
             }
             screen.refresh();
         }
@@ -177,72 +217,52 @@ public class App {
         return true;
     }
 
-    private void autoSave() {
-        gamemode = Mode.Save;
-        File saveFile = new File(AUTO_SAVE_FILE);
+    private void autoSave() {saveFile(AUTO_SAVE_FILE);}
+
+    private void saveFile(String filename) {
+        File saveFile = new File(filename);
         try {
             Boolean created = saveFile.createNewFile();
             try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(saveFile))) {
-                oos.writeObject(sudokuMap);
-            } catch (Exception e) {
-                if (created) saveFile.delete();
-            }
+                int[][][] sudokuSave = {sudokuMask, sudokuGame}; oos.writeObject(sudokuSave);
+            } catch (Exception e) { if (created) saveFile.delete(); }
         } catch (Exception e) { }
     }
 
-    private void autoLoad() {
-        File saveFile = new File(AUTO_SAVE_FILE);
+    private void autoLoad() {loadFile(AUTO_SAVE_FILE);}
+
+    private void loadFile(String filename) {
+        File saveFile = new File(filename);
         try {
             Boolean created = saveFile.createNewFile();
             try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(saveFile))) {
-                sudokuMap = (int[][]) ois.readObject();
-            } catch (Exception e) {
-                if (created) saveFile.delete();
-            }
+                int[][][] sudokuSave = (int[][][]) ois.readObject(); sudokuMask = sudokuSave[0]; sudokuGame = sudokuSave[1];
+            } catch (Exception e) { if (created) saveFile.delete(); }
         } catch (Exception e) { }
-        gamemode = Mode.Game;
-        savename = new StringBuilder();
-        editIndex = 0;
     }
 
     private void submitEdit() {
         File saveFile = new File(savename.toString() + ".dat");
         Boolean created = false;
-        try {
-            created = saveFile.createNewFile();
-        } catch (IOException e) { }
+        try { created = saveFile.createNewFile(); } catch (IOException e) { }
         switch (gamemode) {
             case Save:
                 try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(saveFile))) {
-                    oos.writeObject(sudokuMap);
-                    toggleMode(Mode.Game);
-                    drawPrompt("               Success!");
-                } catch (Exception e) {
-                    drawPrompt("            Failed to save.");
-                    if (created) saveFile.delete();
-                }
+                    int[][][] sudokuSave = {sudokuMask, sudokuGame}; oos.writeObject(sudokuSave);
+                    toggleMode(Mode.Game); drawPrompt("               Success!");
+                } catch (Exception e) { drawPrompt("            Failed to save."); if (created) saveFile.delete(); }
                 break;
             case Load:
                 try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(saveFile))) {
-                    sudokuMap = (int[][]) ois.readObject();
-                    gamemode = Mode.Game;
-                    drawSudoku();
-                    drawPrompt("               Success!");
-                } catch (Exception e) {
-                    drawPrompt("            Failed to load.");
-                    if (created) saveFile.delete();
-                }
+                    int[][][] sudokuSave = (int[][][]) ois.readObject(); sudokuMask = sudokuSave[0]; sudokuGame = sudokuSave[1];
+                    gamemode = Mode.Game; drawSudoku(); drawPrompt("               Success!");
+                } catch (Exception e) { drawPrompt("            Failed to load."); if (created) saveFile.delete(); }
             default:
         }
         screen.setCursorPosition(null);
     }
 
-    private void toggleMode(Mode newMode) {
-        gamemode = newMode;
-        savename = new StringBuilder();
-        editIndex = 0;
-        if (gamemode.equals(Mode.Game)) drawHint(); else drawPrompt();
-    }
+    private void toggleMode(Mode newMode) {gamemode=newMode;savename=new StringBuilder();editIndex=0;drawSudoku();}
 
     private void deleteChar(Direction direction) {
         switch (direction) {
@@ -265,67 +285,65 @@ public class App {
         drawPrompt();
     }
 
-    private void inputReset() {
-        for (int[] is : sudokuMap) Arrays.fill(is, 0);
-        drawBoard();
-        drawCursor();
-    }
+    private void inputMask(Character character) {inputNumber(character);sudokuMask[cursorRow][cursorCol]=character=='0'?0:1;drawBoard();drawPiece();drawCursor();}
 
     private void inputNumber(Character character) {
-        sudokuMap[cursorRow][cursorCol] = character - '0';
-        if (character == '0') character = ' ';
-        screen.setCharacter(leftTopPosition.withRelative(4 *cursorCol + 2, 2 * cursorRow + 1),
-            new TextCharacter(character));
-        drawHint();
-        drawCursor();
+        if ((gamemode == Mode.Prep && character != '0') || sudokuMask[cursorRow][cursorCol] == 0) {
+            sudokuGame[cursorRow][cursorCol] = character - '0';
+            if (character == '0') character = ' ';
+            screen.setCharacter(leftTopPosition.withRelative(4 *cursorCol + 2, 2 * cursorRow + 1), new TextCharacter(character));
+            checkWin();
+            drawCursor();
+        }
+    }
+
+    private void checkWin() {
+        boolean[][] rows=new boolean[9][10];
+        boolean[][] cols=new boolean[9][10];
+        boolean[][] blocks=new boolean[9][10];
+        for (int row = 0; row < sudokuGame.length; row++)
+            for (int col = 0; col < sudokuGame[row].length; col++) {
+                if (rows[row][sudokuGame[row][col]]||cols[col][sudokuGame[row][col]]||blocks[row/3*3+col/3][sudokuGame[row][col]])
+                    return;
+                rows[row][sudokuGame[row][col]]             = true;
+                cols[col][sudokuGame[row][col]]             = true;
+                blocks[row/3*3+col/3][sudokuGame[row][col]] = true;
+            }
+        drawPrompt("               You win!");
     }
 
     private void paintSudoku() throws IOException {
         screen.clear();
         gridTextGraphics = screen.newTextGraphics();
-        gridTextGraphics.setBackgroundColor(ANSI.BLACK);
-        gridTextGraphics.setForegroundColor(ANSI.CYAN);
+        gridTextGraphics.setBackgroundColor(ANSI.BLACK); gridTextGraphics.setForegroundColor(ANSI.CYAN);
         if (terminalSize.getColumns() >= CANVAS_COLS && terminalSize.getRows() >= CANVAS_ROWS)
             drawSudoku();
         else drawWarning();
         screen.refresh();
     }
 
-    private void drawSudoku() {
-        drawBoard();
-        drawPiece();
-        drawHint();
-        drawCursor();
-    }
+    private void drawSudoku() {drawBoard();drawPiece();drawCursor();drawHint();drawPrompt();}
 
     private void drawBoard() {
         String rowString;
         gridTextGraphics.putString(leftTopPosition, TOP_BORDER);
         for (int row = 1; row < GRID_ROWS - 1; row++) {
-            if (row % 6 == 0) rowString = DOUBLE_GRID;
-            else if (row % 2 == 0) rowString = SINGLE_GRID;
-            else rowString = NUMBER_ROW;
-            gridTextGraphics.putString(
-                leftTopPosition.withRelativeRow(row), rowString);
+            if (row % 6 == 0) rowString = DOUBLE_GRID; else if (row % 2 == 0) rowString = SINGLE_GRID; else rowString = NUMBER_ROW;
+            gridTextGraphics.putString(leftTopPosition.withRelativeRow(row), rowString);
         }
-        gridTextGraphics.putString(
-            leftTopPosition.withRelativeRow(GRID_ROWS - 1), BOTTOM_BORDER);
+        gridTextGraphics.putString(leftTopPosition.withRelativeRow(GRID_ROWS - 1), BOTTOM_BORDER);
     }
 
     private void drawPiece() {
-        for (int row = 0; row < sudokuMap.length; row++)
-            for (int col = 0; col < sudokuMap[row].length; col++)
-                if (sudokuMap[row][col] > 0)
-                    gridTextGraphics.setCharacter(
-                        leftTopPosition.withRelative(4 * col + 2, 2 * row + 1),
-                        (char)('0' + sudokuMap[row][col]));
+        for (int row = 0; row < sudokuGame.length; row++)
+            for (int col = 0; col < sudokuGame[row].length; col++)
+                if ((gamemode != Mode.Prep || sudokuMask[row][col] == 1) && sudokuGame[row][col] > 0)
+                    gridTextGraphics.setCharacter(leftTopPosition.withRelative(4 * col + 2, 2 * row + 1), (char)('0' + sudokuGame[row][col]));
     }
 
     private void drawHint() {
-        for (int[] is : LINE)
-            gridTextGraphics.drawLine(leftTopPosition.withRelative(is[0], is[1]),
-                leftTopPosition.withRelative(is[2], is[3]), '▓');
-        gridTextGraphics.putString(leftTopPosition.withRelative(0, GRID_ROWS), "Esc退出|r重置|1-9输入|0 清空|↑↓←→导航");
+        for (int[] is : LINE) gridTextGraphics.drawLine(leftTopPosition.withRelative(is[0], is[1]), leftTopPosition.withRelative(is[2], is[3]), '▓');
+        gridTextGraphics.putString(leftTopPosition.withRelative(0, GRID_ROWS), "Esc退出|p重置|1-9输入|0 清空|↑↓←→导航");
         gridTextGraphics.putString(leftTopPosition.withRelative(4, GRID_ROWS + 1), "s保存|l载入|Enter确定|Esc取消");
         screen.setCursorPosition(null);
     }
@@ -335,46 +353,38 @@ public class App {
         screen.setCursorPosition(leftTopPosition.withRelative(0 + PROMPT.get(gamemode).length() + editIndex, -1));
     }
 
-    private void drawPrompt() {
-        drawPrompt(PROMPT.get(gamemode) + savename.toString());
-    }
+    private void drawPrompt() {drawPrompt(PROMPT.get(gamemode)+savename.toString());}
 
     private void drawCursor(int deltaCol, int deltaRow) {
         if (cursorCol == 8 && deltaCol > 0 || cursorCol == 0 && deltaCol < 0) deltaCol = 0;
         if (cursorRow == 8 && deltaRow > 0 || cursorRow == 0 && deltaRow < 0) deltaRow = 0;
-        if (deltaCol != 0 || deltaRow != 0) flipStyle(false);
-        cursorCol += deltaCol;
-        cursorRow += deltaRow;
-        flipStyle(true);
-        drawHint();
+        if (deltaCol != 0 || deltaRow != 0) flipStyle(false); cursorCol += deltaCol; cursorRow += deltaRow; flipStyle(true); drawHint();
     }
 
-    private void drawCursor() {
-        flipStyle(true);
-    }
+    private void drawCursor() {flipStyle(true);}
 
-    private void drawWarning() {
-        gridTextGraphics.putString(new TerminalPosition(0, 0),
-            String.format("终端尺寸过小，请确保至少为%dx%d（当前为：%dx%d）",
-                CANVAS_COLS, CANVAS_ROWS, terminalSize.getColumns(), terminalSize.getRows()));
-    }
+    private void drawWarning() {gridTextGraphics.putString(new TerminalPosition(0,0),String.format("终端尺寸过小，请确保至少为%dx%d（当前为：%dx%d）",CANVAS_COLS,CANVAS_ROWS,terminalSize.getColumns(),terminalSize.getRows()));}
 
     private void flipStyle(Boolean stylish) {
         fillStyle(0, 2 * cursorRow + 1, GRID_COLS, 1, ROW_BACK, ROW_FORE, stylish);
         fillStyle(4 * cursorCol + 1, 0, 3, GRID_ROWS, COL_BACK, COL_FORE, stylish);
         fillStyle(12 * (cursorCol / 3) + 1, 6 * (cursorRow / 3) + 1, 11, 5, REGION_BACK, REGION_FORE, stylish);
+        for (int row = 0; row < sudokuMask.length; row++)
+            for (int col = 0; col < sudokuMask[row].length; col++)
+                if (sudokuMask[row][col] == 1)
+                    fillStyle(4 * col + 1, 2 * row + 1, 3, 1, MASK_BACK, MASK_FORE, stylish);
         fillStyle(4 * cursorCol + 1, 2 * cursorRow + 1, 3, 1, CORE_BACK, CORE_FORE, stylish);
-        int currentNumber = sudokuMap[cursorRow][cursorCol];
-        if (stylish && currentNumber != 0) {
-            for (int row = 0; row < sudokuMap.length; row++)
-                if (currentNumber == sudokuMap[row][cursorCol] && row != cursorRow)
+        int currentNumber = sudokuGame[cursorRow][cursorCol];
+        if (stylish && currentNumber != 0 && gamemode == Mode.Game) {
+            for (int row = 0; row < sudokuGame.length; row++)
+                if (currentNumber == sudokuGame[row][cursorCol] && row != cursorRow)
                     fillStyle(4 * cursorCol + 1, 2 * row + 1, 3, 1, ERROR_BACK, ERROR_FORE, stylish);
-            for (int col = 0; col < sudokuMap[cursorRow].length; col++)
-                if (currentNumber == sudokuMap[cursorRow][col] && col != cursorCol)
+            for (int col = 0; col < sudokuGame[cursorRow].length; col++)
+                if (currentNumber == sudokuGame[cursorRow][col] && col != cursorCol)
                     fillStyle(4 * col + 1, 2 * cursorRow + 1, 3, 1, ERROR_BACK, ERROR_FORE, stylish);
             for (int row = 3 * (cursorRow / 3); row < 3 * (cursorRow / 3) + 3; row++)
                 for (int col = 3 * (cursorCol / 3); col < 3 * (cursorCol / 3) + 3 ; col++)
-                    if (currentNumber == sudokuMap[row][col] && row != cursorRow && col != cursorCol)
+                    if (currentNumber == sudokuGame[row][col] && row != cursorRow && col != cursorCol)
                         fillStyle(4 * col + 1, 2 * row + 1, 3, 1, ERROR_BACK, ERROR_FORE, stylish);
         }
     }
@@ -382,15 +392,8 @@ public class App {
     private void fillStyle(int left, int top, int deltaX, int deltaY, ANSI back, ANSI fore, Boolean stylish) {
         for (int row = top; row < top + deltaY; row++)
             for (int col = left; col < left + deltaX; col++)
-                screen.setCharacter(leftTopPosition.withRelative(col, row),
-                    screen.getBackCharacter(leftTopPosition.withRelative(col, row))
-                        .withBackgroundColor(stylish ? back : BASE_BACK)
-                        .withForegroundColor(stylish ? fore : BASE_FORE));
+                screen.setCharacter(leftTopPosition.withRelative(col, row), screen.getBackCharacter(leftTopPosition.withRelative(col, row)).withBackgroundColor(stylish ? back : BASE_BACK).withForegroundColor(stylish ? fore : BASE_FORE));
     }
 
-    private void refreshPosition() {
-        leftTopPosition = new TerminalPosition(
-            (terminalSize.getColumns() - CANVAS_COLS) / 2 + 2,
-            (terminalSize.getRows() - CANVAS_ROWS) / 2 + 1);
-    }
+    private void refreshPosition() {leftTopPosition=new TerminalPosition((terminalSize.getColumns()-CANVAS_COLS)/2+2,(terminalSize.getRows()-CANVAS_ROWS)/2+1);}
 }
